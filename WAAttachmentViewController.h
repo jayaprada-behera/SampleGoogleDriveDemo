@@ -7,6 +7,7 @@
 //
 
 #import <UIKit/UIKit.h>
+#import <QuickLook/QuickLook.h>
 
 @interface WAAttachmentViewController : UIViewController
 @property (nonatomic, strong) UIDocumentInteractionController *docInteractionController;

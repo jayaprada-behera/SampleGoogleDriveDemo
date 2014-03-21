@@ -22,6 +22,7 @@
 #define mime_type_index                     1
 #define link_Idntifier_index                0
 #define isFolder_index                      3
+#define file_name_index                     4
 
 #define FILE_SECTION                        0
 #define FOLDER_SECTION                      1
@@ -30,11 +31,6 @@
 static NSString *const kKeychainItemName = @"<My app>: Google Drive";
 static NSString *const kClientId = @"<Client ID>";
 static NSString *const kClientSecret = @"<Client Secret>";
-
-
-//https://console.developers.google.com/project/apps~gleaming-glass-523/apiui/credential
-//https://groups.google.com/forum/#!topic/adwords-api/_kd-BaK1-Ok
-//https://developers.google.com/drive/web/search-parameters
 
 @interface WARootViewController ()<UITableViewDelegate,UITableViewDataSource,UIAlertViewDelegate,UIImagePickerControllerDelegate,UINavigationControllerDelegate>
 {
@@ -69,6 +65,10 @@ static NSString *const kClientSecret = @"<Client Secret>";
 @synthesize fileArray;
 @synthesize downloadedDataFileArray;
 @synthesize childFolderDriveFileArray;
+
+//https://developers.google.com/drive/ios/quickstart#step_1_enable_the_drive_api
+//https://console.developers.google.com/project/apps~gleaming-glass-523/apiui/credential
+//https://console.developers.google.com/project
 
 - (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
 {
@@ -255,7 +255,7 @@ static NSString *const kClientSecret = @"<Client Secret>";
             GTLDriveFileExportLinks *fileExportLinks;
             
             NSString    *exportFormat=@"application/pdf";
-            
+
             fileExportLinks = [file exportLinks];
             
             downloadURL = [fileExportLinks JSONValueForKey:exportFormat];
@@ -268,7 +268,7 @@ static NSString *const kClientSecret = @"<Client Secret>";
             
             [fileArray addObject:fileName];
             NSArray *fileInfoArray = [NSArray arrayWithObjects:file.identifier, file.mimeType, downloadURL,
-                                      [NSNumber numberWithBool:isFolder], nil];
+                                      [NSNumber numberWithBool:isFolder],fileName, nil];
             
             NSDictionary *dict = [NSDictionary dictionaryWithObject:fileInfoArray forKey:fileName];
             
@@ -379,6 +379,16 @@ static NSString *const kClientSecret = @"<Client Secret>";
 #pragma mark - UIButton Actions
 -(IBAction)downloadButtonTaped:(id)sender{
     
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths objectAtIndex:0];
+    NSArray *filePathsArray = [[NSFileManager defaultManager] subpathsOfDirectoryAtPath:documentsDirectory  error:nil];
+    for (int i = 0; i < filePathsArray.count; i++) {
+        NSString *filePath = [documentsDirectory stringByAppendingPathComponent:[filePathsArray objectAtIndex:i]];
+        NSURL *outputURL= [[NSURL alloc] initFileURLWithPath:filePath];
+        if (![self.downloadedDataFileArray containsObject:outputURL]) {
+            [self.downloadedDataFileArray addObject:outputURL];
+        }
+    }
     WAAttachmentViewController *attachmentVC = [[WAAttachmentViewController alloc]initWithNibName:@"WAAttachmentViewController" bundle:nil];
     
     attachmentVC.urlArray = self.downloadedDataFileArray;
@@ -393,10 +403,20 @@ static NSString *const kClientSecret = @"<Client Secret>";
     NSString *downloadUrl = [[a objectAtIndex:0] objectAtIndex:download_url_link_index];
     NSString *mime_Type = [[a objectAtIndex:0] objectAtIndex:mime_type_index];
     BOOL isFolder =  [[[a objectAtIndex:0] objectAtIndex:isFolder_index] boolValue];
-    
+    NSString *fileName = [[a objectAtIndex:0] objectAtIndex:file_name_index];
     if (isFolder) {
         [[[UIAlertView alloc]initWithTitle:@"" message:@"Its a folder" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil, nil]show];
         return;
+    }
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths objectAtIndex:0];
+    NSString *filePath = [documentsDirectory stringByAppendingPathComponent:fileName];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if ([fileManager fileExistsAtPath:filePath]) {
+        NSLog(@"file exists");
+        [[[UIAlertView alloc]initWithTitle:@"" message:@"This file is already downloaded,Tap on download button to see all the downloaded files." delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil, nil]show];
+        return;
+//        [fileManager removeItemAtPath:filePath error:nil];
     }
 
     __block NSString *alertMsg = @"";
@@ -413,6 +433,7 @@ static NSString *const kClientSecret = @"<Client Secret>";
             alertMsg = @"File successfully downloaded";
             
             if ([mime_Type isEqualToString:@"image/png"] || [mime_Type isEqualToString:@"image/jpeg"] ) {
+               
                 //saving the downloaded data into Photos Album
                 ALAssetsLibrary *library = [[ALAssetsLibrary alloc] init];
                 
@@ -426,28 +447,11 @@ static NSString *const kClientSecret = @"<Client Secret>";
                     }
                 }];
             }
-            
-           
-            NSDateFormatter *df = [[NSDateFormatter alloc] init];
-            [df setDateFormat:@"dd-MMM-yyyy-hh-mm-ss"];
-            NSString *fileName = [df stringFromDate:[NSDate date]];//name of the file
-            
-            fileName =  [fileName stringByAppendingPathExtension:[[mime_Type componentsSeparatedByString:@"/"] objectAtIndex:1]];//either png/pdf
-            
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths objectAtIndex:0];
-            NSString *filePath = [documentsDirectory stringByAppendingPathComponent:fileName];
-
             //replace existing file if we have to.
             BOOL success = [data writeToFile:filePath atomically:YES];
             if (success) {
                 NSLog(@"%@ saved to disk successfully.", [[mime_Type componentsSeparatedByString:@"/"] objectAtIndex:1]);
-                NSURL *outputURL = [[NSURL alloc] initFileURLWithPath:filePath];
-                NSData *data1 = [NSData dataWithContentsOfURL:outputURL];
-                NSLog(@"data length%d",data1.length);
-                [self.downloadedDataFileArray addObject:outputURL];
             }
-
         } else
             alertMsg = [error description];
         [WAEditUtilities showErrorMessageWithTitle:@""
@@ -586,7 +590,7 @@ static NSString *const kClientSecret = @"<Client Secret>";
     switch (indexPath.section) {
         case FOLDER_SECTION:{
             GTLDriveChildReference *ref = [self.driveChildren objectAtIndex:indexPath.row];
-            [self getFileListFromSpecifiedParentFolder:ref.identifier];
+            [self getFileListFromSpecifiedParentFolder:@"0B6VjnmePsu00ZmVTYlpSelBPU0E"];
             break;
         }
         default:
@@ -623,6 +627,8 @@ static NSString *const kClientSecret = @"<Client Secret>";
                           for (GTLDriveChildReference *child in children) {
                               
                               GTLQuery *query = [GTLQueryDrive queryForFilesGetWithFileId:child.identifier];
+                              //-(void)trackStatusOfRequest:(GTLQuery *)query forGTLDriveChildList:(GTLDriveChildList *)children withAlert:(UIAlertView *)alert forCount:(int)_count
+                              
                               // queryTicket can be used to track the status of the request.
                               [self trackStatusOfChildFolderRequest:query forGTLDriveChildList:children withAlert:alert ];
                           }
@@ -643,7 +649,7 @@ static NSString *const kClientSecret = @"<Client Secret>";
                           }
                       }
                       
-//                      NSLog(@"\nfile name = %@", file.title);
+                      NSLog(@"\nfile name = %@", file.title);
                       if (file.title.length > 0) {
                           [childrenFolder addObject:file.title];
                       }

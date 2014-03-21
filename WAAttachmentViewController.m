@@ -8,7 +8,7 @@
 
 #import "WAAttachmentViewController.h"
 
-@interface WAAttachmentViewController ()<UITableViewDelegate,UITableViewDataSource,UIDocumentInteractionControllerDelegate>
+@interface WAAttachmentViewController ()<UITableViewDelegate,UITableViewDataSource,UIDocumentInteractionControllerDelegate,QLPreviewControllerDataSource,QLPreviewControllerDelegate>
 
 @property (weak, nonatomic) IBOutlet UITableView *attachmentTableView;
 @end
@@ -33,8 +33,27 @@
     self.attachmentTableView .delegate = self;
     self.attachmentTableView.dataSource = self;
     
-    // Do any additional setup after loading the view from its nib.
+    UIBarButtonItem *shareButton = [[UIBarButtonItem alloc]initWithTitle:@"Share" style:UIBarButtonItemStylePlain target:self action:@selector(shareButtonTouchUpInside:)];
+    [self.navigationItem setRightBarButtonItem:shareButton];
+    
 }
+-(IBAction)shareButtonTouchUpInside:(id)sender{
+    
+    NSIndexPath *selectedIndexPath = [self.attachmentTableView indexPathForSelectedRow];
+    if (selectedIndexPath == nil) {
+        [[[UIAlertView alloc]initWithTitle:@"Please select one file to share" message:@"" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil, nil]show];
+        return;
+    }
+    NSURL *fileURL = [self.urlArray objectAtIndex:selectedIndexPath.row];
+    
+    self.docInteractionController.URL = fileURL;
+    
+    [self.docInteractionController presentOptionsMenuFromRect:self.view.frame
+                                                       inView:self.view
+                                                     animated:YES];
+    
+}
+
 - (void)setupDocumentControllerWithURL:(NSURL *)url{
     
     if (self.docInteractionController == nil){
@@ -46,7 +65,6 @@
         
         self.docInteractionController.URL = url;
     }
-    
 }
 
 #pragma mark - Table View
@@ -72,7 +90,7 @@
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
     NSURL *fileURL = [self.urlArray objectAtIndex:indexPath.row];
-//    NSLog(@"dataLength %d",[[NSData dataWithContentsOfURL:fileURL] length]);
+    NSLog(@"dataLength %d",[[NSData dataWithContentsOfURL:fileURL] length]);
     [self setupDocumentControllerWithURL:fileURL];
 
     cell.textLabel.text = [[fileURL path] lastPathComponent];
@@ -92,13 +110,42 @@
     return cell;
 }
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
-    NSURL *fileURL = [self.urlArray objectAtIndex:indexPath.row];
+   
+    
+    // three ways to present a preview:
+    // 1. Don't implement this method and simply attach the canned gestureRecognizers to the cell
+    //
+    // 2. Don't use canned gesture recognizers and simply use UIDocumentInteractionController's
+    //      presentPreviewAnimated: to get a preview for the document associated with this cell
+    //
+    // 3. Use the QLPreviewController to give the user preview access to the document associated
+    //      with this cell and all the other documents as well.
+    
+    // for case 2 use this, allowing UIDocumentInteractionController to handle the preview:
+    /*
+     NSURL *fileURL;
+     if (indexPath.section == 0)
+     {
+     fileURL = [NSURL fileURLWithPath:[[NSBundle mainBundle] pathForResource:documents[indexPath.row] ofType:nil]];
+     }
+     else
+     {
+     fileURL = [self.documentURLs objectAtIndex:indexPath.row];
+     }
+     [self setupDocumentControllerWithURL:fileURL];
+     [self.docInteractionController presentPreviewAnimated:YES];
+     */
+    
+    // for case 3 we use the QuickLook APIs directly to preview the document -
+    QLPreviewController *previewController = [[QLPreviewController alloc] init];
+    previewController.dataSource = self;
+    previewController.delegate = self;
+    
+    // start previewing the document at the current section index
+    previewController.currentPreviewItemIndex = indexPath.row;
+    [[self navigationController] pushViewController:previewController animated:YES];
+    
 
-self.docInteractionController.URL = fileURL;
-
-[self.docInteractionController presentOptionsMenuFromRect:self.view.frame
-                                                   inView:self.view
-                                                 animated:YES];
 }
 
 //None of these delegate methods are ever called which is weird:
@@ -125,6 +172,36 @@ self.docInteractionController.URL = fileURL;
     NSLog(@"documentInteractionControllerDidDismissOpenInMenu ");
 
 }
+#pragma mark - UIDocumentInteractionControllerDelegate
+
+- (UIViewController *)documentInteractionControllerViewControllerForPreview:(UIDocumentInteractionController *)interactionController
+{
+    return self;
+}
+
+
+#pragma mark - QLPreviewControllerDataSource
+
+// Returns the number of items that the preview controller should preview
+- (NSInteger)numberOfPreviewItemsInPreviewController:(QLPreviewController *)previewController
+{
+    NSInteger numToPreview  = self.urlArray.count;
+    
+    return numToPreview;
+}
+
+- (void)previewControllerDidDismiss:(QLPreviewController *)controller
+{
+    // if the preview dismissed (done button touched), use this method to post-process previews
+}
+
+// returns the item that the preview controller should preview
+- (id)previewController:(QLPreviewController *)previewController previewItemAtIndex:(NSInteger)idx
+{
+    NSURL *fileURL  = [self.urlArray objectAtIndex:idx];
+    return fileURL;
+}
+
 
 - (void)didReceiveMemoryWarning
 {
